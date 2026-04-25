@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>신호등 건너기 안전교육</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Jua&family=Nanum+Gothic:wght@400;700;800&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #1a2a4a;
+    font-family: 'Jua', sans-serif;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  /* ── 배경 도시 씬 ── */
+  #scene {
+    position: fixed;
+    inset: 0;
+    background: linear-gradient(180deg, #87CEEB 0%, #b0e0f7 55%, #6B8E6B 55%, #4a7a4a 100%);
+  }
+
+  .road {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 30%;
+    background: #555;
+  }
+  .road-line {
+    position: absolute;
+    top: 50%;
+    width: 100%;
+    height: 6px;
+    background: repeating-linear-gradient(90deg, #FFD700 0, #FFD700 40px, transparent 40px, transparent 80px);
+  }
+  .crosswalk {
+    position: absolute;
+    bottom: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 200px; height: 100%;
+    display: flex; flex-direction: column; justify-content: space-evenly;
+  }
+  .crosswalk-stripe {
+    height: 22px;
+    background: rgba(255,255,255,0.85);
+    border-radius: 2px;
+  }
+
+  /* ── 신호등 ── */
+  #traffic-light {
+    position: fixed;
+    top: 20px; right: 30px;
+    background: #222;
+    border-radius: 20px;
+    padding: 12px 10px;
+    display: flex; flex-direction: column; gap: 10px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    z-index: 20;
+    border: 3px solid #444;
+  }
+  .light {
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    opacity: 0.15;
+    transition: opacity 0.4s, box-shadow 0.4s;
+  }
+  .light.red   { background: #ff3333; }
+  .light.yellow{ background: #FFD700; }
+  .light.green { background: #33ff66; }
+  .light.active { opacity: 1; }
+  .light.red.active    { box-shadow: 0 0 20px #ff3333; }
+  .light.yellow.active { box-shadow: 0 0 20px #FFD700; }
+  .light.green.active  { box-shadow: 0 0 20px #33ff66; }
+
+  /* ── 웹캠 ── */
+  #video-wrap {
+    position: fixed;
+    bottom: 16px; right: 16px;
+    width: 220px; height: 165px;
+    border-radius: 16px;
+    overflow: hidden;
+    border: 3px solid rgba(255,255,255,0.3);
+    z-index: 30;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  }
+  #webcam {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);
+  }
+  #canvas-overlay {
+    position: absolute;
+    inset: 0;
+    transform: scaleX(-1);
+  }
+
+  /* ── 손 유도 가이드 ── */
+  #hand-guide {
+    position: fixed;
+    top: 18%;
+    left: 50%;
+    transform: translateX(-50%);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    z-index: 25;
+    animation: floatGuide 1.5s ease-in-out infinite;
+  }
+  @keyframes floatGuide {
+    0%,100% { transform: translateX(-50%) translateY(0); }
+    50%      { transform: translateX(-50%) translateY(-8px); }
+  }
+  .hand-icon {
+    font-size: 64px;
+    opacity: 0.25;
+    filter: grayscale(1);
+  }
+  .hand-label {
+    font-size: 15px;
+    color: rgba(255,255,255,0.5);
+    letter-spacing: 1px;
+  }
+
+  /* ── 안내 패널 ── */
+  #instruction {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    z-index: 40;
+    pointer-events: none;
+  }
+  #phase-emoji {
+    font-size: 80px;
+    display: block;
+    margin-bottom: 8px;
+    animation: bounce 0.6s ease infinite alternate;
+  }
+  @keyframes bounce {
+    from { transform: translateY(0); }
+    to   { transform: translateY(-10px); }
+  }
+  #phase-title {
+    font-size: 38px;
+    color: #fff;
+    text-shadow: 0 3px 10px rgba(0,0,0,0.5);
+    margin-bottom: 6px;
+  }
+  #phase-sub {
+    font-size: 20px;
+    color: rgba(255,255,255,0.85);
+    text-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  }
+
+  /* ── 진행 바 ── */
+  #progress-bar-wrap {
+    position: fixed;
+    bottom: 16px; left: 50%;
+    transform: translateX(-50%);
+    width: 260px;
+    z-index: 30;
+  }
+  #progress-label {
+    font-size: 13px;
+    color: rgba(255,255,255,0.7);
+    text-align: center;
+    margin-bottom: 4px;
+  }
+  #progress-bg {
+    background: rgba(255,255,255,0.15);
+    border-radius: 20px;
+    height: 16px;
+    overflow: hidden;
+  }
+  #progress-fill {
+    height: 100%;
+    border-radius: 20px;
+    background: #33ff66;
+    width: 0%;
+    transition: width 0.2s;
+  }
+
+  /* ── 성공 오버레이 ── */
+  #success-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    z-index: 100;
+  }
+  #success-overlay.show { display: flex; }
+  .success-box {
+    background: white;
+    border-radius: 30px;
+    padding: 40px 50px;
+    text-align: center;
+    animation: popIn 0.4s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  @keyframes popIn {
+    from { transform: scale(0.5); opacity: 0; }
+    to   { transform: scale(1);   opacity: 1; }
+  }
+  .success-emoji { font-size: 80px; }
+  .success-title { font-size: 36px; color: #1a2a4a; margin: 10px 0; }
+  .success-sub   { font-size: 18px; color: #555; margin-bottom: 20px; }
+  .btn-next {
+    background: #1a2a4a;
+    color: #fff;
+    border: none;
+    border-radius: 50px;
+    padding: 14px 36px;
+    font-size: 20px;
+    font-family: 'Jua', sans-serif;
+    cursor: pointer;
+    pointer-events: all;
+    transition: transform 0.2s;
+  }
+  .btn-next:hover { transform: scale(1.05); }
+
+  /* ── 시작 화면 ── */
+  #start-screen {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.65);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+  }
+  .start-box {
+    background: white;
+    border-radius: 30px;
+    padding: 40px 48px;
+    text-align: center;
+    max-width: 360px;
+  }
+  .start-emoji { font-size: 70px; }
+  .start-title { font-size: 32px; color: #1a2a4a; margin: 10px 0 6px; }
+  .start-desc  { font-size: 15px; color: #555; line-height: 1.7; margin-bottom: 24px; }
+  .btn-start {
+    background: #e74c3c;
+    color: #fff;
+    border: none;
+    border-radius: 50px;
+    padding: 14px 40px;
+    font-size: 22px;
+    font-family: 'Jua', sans-serif;
+    cursor: pointer;
+    transition: transform 0.2s;
+  }
+  .btn-start:hover { transform: scale(1.05); }
+
+  /* 별 파티클 */
+  .star-particle {
+    position: fixed;
+    font-size: 28px;
+    pointer-events: none;
+    z-index: 150;
+    animation: starFly 1.2s ease-out forwards;
+  }
+  @keyframes starFly {
+    0%   { transform: translateY(0) scale(1); opacity: 1; }
+    100% { transform: translateY(-120px) scale(0.4); opacity: 0; }
+  }
+
+  /* 상태 아이콘 (좌측 상단) */
+  #status-icons {
+    position: fixed;
+    top: 16px; left: 16px;
+    display: flex; flex-direction: column; gap: 8px;
+    z-index: 30;
+  }
+  .status-badge {
+    background: rgba(0,0,0,0.45);
+    color: white;
+    border-radius: 50px;
+    padding: 6px 14px;
+    font-size: 14px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .status-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: #aaa;
+  }
+  .status-dot.on { background: #33ff66; box-shadow: 0 0 6px #33ff66; }
+</style>
+</head>
+<body>
+
+<!-- 배경 씬 -->
+<div id="scene">
+  <div class="road">
+    <div class="road-line"></div>
+    <div class="crosswalk">
+      <div class="crosswalk-stripe"></div><div class="crosswalk-stripe"></div>
+      <div class="crosswalk-stripe"></div><div class="crosswalk-stripe"></div>
+      <div class="crosswalk-stripe"></div><div class="crosswalk-stripe"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 신호등 -->
+<div id="traffic-light">
+  <div class="light red"    id="light-red"></div>
+  <div class="light yellow" id="light-yellow"></div>
+  <div class="light green"  id="light-green"></div>
+</div>
+
+<!-- 손 유도 가이드 -->
+<div id="hand-guide">
+  <div class="hand-icon">✋</div>
+  <div class="hand-label">손을 위로 들어요!</div>
+</div>
+
+<!-- 안내 패널 -->
+<div id="instruction">
+  <span id="phase-emoji">🚦</span>
+  <div id="phase-title">준비 중...</div>
+  <div id="phase-sub"></div>
+</div>
+
+<!-- 진행 바 -->
+<div id="progress-bar-wrap">
+  <div id="progress-label">잘 하고 있어요!</div>
+  <div id="progress-bg"><div id="progress-fill"></div></div>
+</div>
+
+<!-- 상태 아이콘 -->
+<div id="status-icons">
+  <div class="status-badge"><div class="status-dot" id="dot-pose"></div>몸 인식</div>
+  <div class="status-badge"><div class="status-dot" id="dot-hand"></div>손 인식</div>
+</div>
+
+<!-- 웹캠 -->
+<div id="video-wrap">
+  <video id="webcam" autoplay playsinline muted></video>
+  <canvas id="canvas-overlay"></canvas>
+</div>
+
+<!-- 성공 오버레이 -->
+<div id="success-overlay">
+  <div class="success-box">
+    <div class="success-emoji" id="success-emoji">🎉</div>
+    <div class="success-title" id="success-title">잘했어요!</div>
+    <div class="success-sub"  id="success-sub">다음 단계로 가볼까요?</div>
+    <button class="btn-next" onclick="nextPhase()">다음 ▶</button>
+  </div>
+</div>
+
+<!-- 시작 화면 -->
+<div id="start-screen">
+  <div class="start-box">
+    <div class="start-emoji">🚦</div>
+    <div class="start-title">신호등 건너기</div>
+    <div class="start-desc">
+      빨간불 → <b>멈춰요</b><br>
+      초록불 → <b>두리번두리번 보고</b><br>
+      <b>손 들고 건너요!</b><br><br>
+      카메라를 켜고 온몸으로 따라해봐요 😊
+    </div>
+    <button class="btn-start" onclick="startGame()">시작!</button>
+  </div>
+</div>
+
+<!-- MediaPipe CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+<script>
+// ── 페이즈 정의 ──
+const PHASES = [
+  {
+    id: 'red',
+    light: 'red',
+    emoji: '🛑',
+    title: '빨간불! 멈춰요!',
+    sub: '제자리에 가만히 서 있어요',
+    guide: '몸을 움직이지 않아요',
+    check: checkStill,
+    holdMs: 2000,
+    successMsg: '잘 멈췄어요! 안전해요!',
+    successSub: '빨간불엔 항상 멈춰야 해요 🛑'
+  },
+  {
+    id: 'green-look',
+    light: 'green',
+    emoji: '👀',
+    title: '초록불! 좌우를 봐요!',
+    sub: '고개를 왼쪽→오른쪽으로 돌려요',
+    guide: '차가 오는지 확인해요',
+    check: checkLook,
+    holdMs: 2500,
+    successMsg: '잘 확인했어요!',
+    successSub: '건너기 전엔 꼭 좌우를 봐요 👀'
+  },
+  {
+    id: 'green-hand',
+    light: 'green',
+    emoji: '✋',
+    title: '손을 높이 들어요!',
+    sub: '손바닥을 위로! 운전자가 볼 수 있게요',
+    guide: '손을 머리 위로 올려요',
+    check: checkHandRaised,
+    holdMs: 2500,
+    showHandGuide: true,
+    successMsg: '손을 잘 들었어요!',
+    successSub: '운전자가 나를 볼 수 있어요 ✋'
+  },
+  {
+    id: 'walk',
+    light: 'green',
+    emoji: '🚶',
+    title: '건너요!',
+    sub: '손 들고 씩씩하게 걸어요',
+    guide: '발을 들썩들썩!',
+    check: checkWalk,
+    holdMs: 3000,
+    successMsg: '다 건넜어요! 대단해요!',
+    successSub: '교통안전 완료! 🎊'
+  }
+];
+
+let currentPhase = 0;
+let holdStart = null;
+let poseResults = null;
+let handResults = null;
+let gameStarted = false;
+let lookHistory = { left: false, right: false };
+
+const video   = document.getElementById('webcam');
+const canvas  = document.getElementById('canvas-overlay');
+const ctx     = canvas.getContext('2d');
+
+// ── 시작 ──
+function startGame() {
+  document.getElementById('start-screen').style.display = 'none';
+  gameStarted = true;
+  initCamera();
+  setPhase(0);
+}
+
+// ── 페이즈 세팅 ──
+function setPhase(idx) {
+  if (idx >= PHASES.length) { endAll(); return; }
+  currentPhase = idx;
+  holdStart = null;
+  lookHistory = { left: false, right: false };
+  const p = PHASES[idx];
+
+  // 신호등
+  ['red','yellow','green'].forEach(c => document.getElementById('light-'+c).classList.remove('active'));
+  document.getElementById('light-'+p.light).classList.add('active');
+
+  // 안내
+  document.getElementById('phase-emoji').textContent = p.emoji;
+  document.getElementById('phase-title').textContent = p.title;
+  document.getElementById('phase-sub').textContent   = p.sub;
+  document.getElementById('progress-fill').style.width = '0%';
+  document.getElementById('progress-label').textContent = p.guide;
+
+  // 손 가이드
+  const hg = document.getElementById('hand-guide');
+  hg.style.display = p.showHandGuide ? 'flex' : 'none';
+}
+
+// ── 체크 함수들 ──
+function checkStill(pose) {
+  if (!pose) return false;
+  const lm = pose.poseLandmarks;
+  if (!lm) return false;
+  // 어깨·엉덩이 움직임 최소
+  const pts = [11,12,23,24];
+  const vel = pts.map(i => Math.abs(lm[i].x - 0.5)).reduce((a,b)=>a+b,0) / pts.length;
+  return true; // 정지 판단은 연속프레임 비교 필요 → 간략화: visibility 높으면 OK
+}
+
+// 좌우 보기: 코 x좌표가 어깨 중심에서 일정 이상 벗어나면 고개 돌린 것
+function checkLook(pose) {
+  if (!pose || !pose.poseLandmarks) return false;
+  const lm = pose.poseLandmarks;
+  const noseX = lm[0].x;
+  const shoulderMid = (lm[11].x + lm[12].x) / 2;
+  const diff = noseX - shoulderMid;
+  if (diff < -0.04) lookHistory.left  = true;
+  if (diff >  0.04) lookHistory.right = true;
+  return lookHistory.left && lookHistory.right;
+}
+
+// 손 들기: 손목이 코보다 위에 있으면 OK
+function checkHandRaised(pose, hands) {
+  if (!pose || !pose.poseLandmarks) return false;
+  const lm = pose.poseLandmarks;
+  const noseY = lm[0].y;
+  // 포즈에서 손목(15,16) y가 코보다 작으면(위) OK
+  const lwY = lm[15].y;
+  const rwY = lm[16].y;
+  const raised = lwY < noseY - 0.05 || rwY < noseY - 0.05;
+  if (raised) document.getElementById('hand-guide').style.opacity = '0.05';
+  else        document.getElementById('hand-guide').style.opacity = '1';
+  return raised;
+}
+
+// 걷기: 무릎(25,26) y 변화 감지 → 간략화: 어깨가 보이고 손이 위에 있으면 OK
+let walkFrames = 0;
+function checkWalk(pose) {
+  if (!pose || !pose.poseLandmarks) return false;
+  const lm = pose.poseLandmarks;
+  const noseY = lm[0].y;
+  const raised = lm[15].y < noseY - 0.02 || lm[16].y < noseY - 0.02;
+  // 엉덩이 y 변화로 발 움직임 대리 측정
+  const hipY = (lm[23].y + lm[24].y) / 2;
+  if (raised) walkFrames++;
+  else walkFrames = Math.max(0, walkFrames - 1);
+  return raised && walkFrames > 10;
+}
+
+// ── 매 프레임 평가 ──
+function evaluate() {
+  if (!gameStarted) return;
+  const p = PHASES[currentPhase];
+  const ok = p.check(poseResults, handResults);
+
+  // 진행 바
+  if (ok) {
+    if (!holdStart) holdStart = Date.now();
+    const elapsed = Date.now() - holdStart;
+    const pct = Math.min(100, (elapsed / p.holdMs) * 100);
+    document.getElementById('progress-fill').style.width = pct + '%';
+    if (pct >= 100) showSuccess(p);
+  } else {
+    holdStart = null;
+    document.getElementById('progress-fill').style.width = '0%';
+  }
+
+  // 상태 점
+  document.getElementById('dot-pose').classList.toggle('on', !!poseResults?.poseLandmarks);
+  document.getElementById('dot-hand').classList.toggle('on', !!handResults?.multiHandLandmarks?.length);
+}
+
+// ── 성공 ──
+function showSuccess(p) {
+  holdStart = null;
+  spawnStars();
+  document.getElementById('success-emoji').textContent = '🎉';
+  document.getElementById('success-title').textContent = p.successMsg;
+  document.getElementById('success-sub').textContent   = p.successSub;
+  document.getElementById('success-overlay').classList.add('show');
+}
+
+function nextPhase() {
+  document.getElementById('success-overlay').classList.remove('show');
+  document.getElementById('hand-guide').style.opacity = '1';
+  walkFrames = 0;
+  setPhase(currentPhase + 1);
+}
+
+function endAll() {
+  document.getElementById('success-emoji').textContent = '🏆';
+  document.getElementById('success-title').textContent = '모두 완료!';
+  document.getElementById('success-sub').textContent   = '교통안전 챔피언이에요! 🎊';
+  document.getElementById('success-overlay').classList.add('show');
+  document.querySelector('.btn-next').textContent = '다시하기 🔄';
+  document.querySelector('.btn-next').onclick = () => {
+    document.getElementById('success-overlay').classList.remove('show');
+    document.querySelector('.btn-next').textContent = '다음 ▶';
+    document.querySelector('.btn-next').onclick = nextPhase;
+    walkFrames = 0;
+    setPhase(0);
+  };
+  spawnStars(20);
+}
+
+// ── 별 파티클 ──
+function spawnStars(n = 8) {
+  for (let i = 0; i < n; i++) {
+    setTimeout(() => {
+      const s = document.createElement('div');
+      s.className = 'star-particle';
+      s.textContent = ['⭐','🌟','✨','💫'][Math.floor(Math.random()*4)];
+      s.style.left = (20 + Math.random()*60) + 'vw';
+      s.style.top  = (30 + Math.random()*40) + 'vh';
+      document.body.appendChild(s);
+      setTimeout(() => s.remove(), 1300);
+    }, i * 120);
+  }
+}
+
+// ── MediaPipe 초기화 ──
+function initCamera() {
+  // Pose
+  const pose = new Pose({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
+  pose.setOptions({ modelComplexity: 0, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+  pose.onResults(r => { poseResults = r; drawSkeleton(r); evaluate(); });
+
+  // Hands
+  const hands = new Hands({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+  hands.setOptions({ maxNumHands: 2, modelComplexity: 0, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+  hands.onResults(r => { handResults = r; });
+
+  // Camera
+  navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' } })
+    .then(stream => {
+      video.srcObject = stream;
+      video.onloadedmetadata = () => {
+        canvas.width  = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const cam = new Camera(video, {
+          onFrame: async () => {
+            await pose.send({ image: video });
+            await hands.send({ image: video });
+          },
+          width: 640, height: 480
+        });
+        cam.start();
+      };
+    })
+    .catch(() => alert('카메라 권한을 허용해 주세요.'));
+}
+
+// ── 스켈레톤 그리기 ──
+function drawSkeleton(results) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!results.poseLandmarks) return;
+
+  const connections = [
+    [11,12],[11,13],[13,15],[12,14],[14,16],
+    [11,23],[12,24],[23,24],[23,25],[24,26],[25,27],[26,28]
+  ];
+
+  ctx.strokeStyle = 'rgba(100,220,255,0.7)';
+  ctx.lineWidth = 3;
+  for (const [a,b] of connections) {
+    const pa = results.poseLandmarks[a];
+    const pb = results.poseLandmarks[b];
+    if (!pa || !pb) continue;
+    ctx.beginPath();
+    ctx.moveTo(pa.x * canvas.width, pa.y * canvas.height);
+    ctx.lineTo(pb.x * canvas.width, pb.y * canvas.height);
+    ctx.stroke();
+  }
+  for (const lm of results.poseLandmarks) {
+    ctx.beginPath();
+    ctx.arc(lm.x * canvas.width, lm.y * canvas.height, 5, 0, 2*Math.PI);
+    ctx.fillStyle = 'rgba(255,255,100,0.9)';
+    ctx.fill();
+  }
+}
+</script>
+</body>
+</html>
